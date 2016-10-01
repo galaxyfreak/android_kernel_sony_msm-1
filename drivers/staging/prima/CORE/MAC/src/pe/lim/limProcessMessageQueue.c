@@ -80,7 +80,7 @@
 #include "vos_memory.h"
 
 /* This value corresponds to 500 ms */
-#define MAX_PROBEREQ_TIME 50
+#define MAX_PROBEREQ_TIME 5000
 
 #ifdef WLAN_FEATURE_EXTSCAN
 #define  SIZE_OF_FIXED_PARAM 12
@@ -222,6 +222,8 @@ __limHandleBeacon(tpAniSirGlobal pMac, tpSirMsgQ pMsg, tpPESession psessionEntry
     }
      else
         limProcessBeaconFrame(pMac, pRxPacketInfo, psessionEntry);
+
+        return;
 }
 
 
@@ -1297,7 +1299,7 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
    PELOG3(limLog(pMac, LOG3, FL("rcvd msgType = %s, sme state = %s, mlm state = %s"),
       limMsgStr(limMsg->type), limSmeStateStr(pMac->lim.gLimSmeState),
       limMlmStateStr(pMac->lim.gLimMlmState));)
-
+#ifdef LIM_TRACE_RECORD
    /*
     * MTRACE logs not captured for events received from SME
     * SME enums (eWNI_SME_START_REQ) starts with 0x16xx.
@@ -1321,6 +1323,7 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
               MTRACE(macTraceMsgRx(pMac, NO_SESSION,
                       LIM_TRACE_MAKE_RXMSG(limMsg->type, LIM_MSG_PROCESSED));)
     }
+#endif
     switch (limMsg->type)
     {
 
@@ -1563,7 +1566,6 @@ limProcessMessages(tpAniSirGlobal pMac, tpSirMsgQ  limMsg)
         case eWNI_SME_GET_TSM_STATS_REQ:
 #endif /* FEATURE_WLAN_ESE && FEATURE_WLAN_ESE_UPLOAD */
         case eWNI_SME_MAC_SPOOF_ADDR_IND:
-        case eWNI_SME_REGISTER_MGMT_FRAME_CB:
             // These messages are from HDD
             limProcessNormalHddMsg(pMac, limMsg, false);   //no need to response to hdd
             break;

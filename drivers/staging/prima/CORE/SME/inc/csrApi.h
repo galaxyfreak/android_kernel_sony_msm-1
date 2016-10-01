@@ -474,6 +474,7 @@ typedef enum
     eCSR_ROAM_FT_RESPONSE,
 #endif
     eCSR_ROAM_FT_START,
+    eCSR_ROAM_INDICATE_MGMT_FRAME,
     eCSR_ROAM_REMAIN_CHAN_READY,
     eCSR_ROAM_SEND_ACTION_CNF,
     //this mean error happens before association_start or roaming_start is called.
@@ -1665,6 +1666,18 @@ typedef void ( *tCsrTsmStatsCallback) (tAniTrafStrmMetrics tsmMetrics, tANI_U32 
 
 ---------------------------------------------------------------------------*/
 typedef void (*tCsrSnrCallback) (v_S7_t snr, tANI_U32 staId, void *pContext);
+
+/*---------------------------------------------------------------------------
+  This is the type for a get current antenna callback to be registered with SME
+  for getting cuurently used antenna index
+
+  \param antennaId to be filled by firmware.
+  \param pContext - any user data given at callback registration.
+  \return None
+
+---------------------------------------------------------------------------*/
+typedef void ( *tCsrAntennaIndexCallback) (int antennaId, void *pContext);
+
 
 #ifdef WLAN_FEATURE_VOWIFI_11R
 eHalStatus csrRoamIssueFTPreauthReq(tHalHandle hHal, tANI_U32 sessionId, tpSirBssDescription pBssDescription);

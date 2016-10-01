@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2014, 2016 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2014 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -745,6 +745,7 @@ void limSendSmeMgmtFrameInd(
                     tANI_U8 *pRxPacketInfo, tpPESession psessionEntry,
                     tANI_S8 rxRssi)
 {
+    tSirMsgQ              mmhMsg;
     tpSirSmeMgmtFrameInd  pSirSmeMgmtFrame = NULL;
     tANI_U16              length;
     tANI_U8               frameType;
@@ -769,7 +770,8 @@ void limSendSmeMgmtFrameInd(
     }
     vos_mem_set((void*)pSirSmeMgmtFrame, length, 0);
 
-    pSirSmeMgmtFrame->frameLen = frameLen;
+    pSirSmeMgmtFrame->mesgType = eWNI_SME_MGMT_FRM_IND;
+    pSirSmeMgmtFrame->mesgLen = length;
     pSirSmeMgmtFrame->sessionId = sessionId;
     pSirSmeMgmtFrame->frameType = frameType;
     pSirSmeMgmtFrame->rxRssi = rxRssi;
@@ -829,14 +831,11 @@ void limSendSmeMgmtFrameInd(
     vos_mem_zero(pSirSmeMgmtFrame->frameBuf, frameLen);
     vos_mem_copy(pSirSmeMgmtFrame->frameBuf, frame, frameLen);
 
-    if (pMac->mgmt_frame_ind_cb)
-       pMac->mgmt_frame_ind_cb(pSirSmeMgmtFrame);
-    else
-    {
-       limLog(pMac, LOGW,
-               FL("Management indication callback not registered!!"));
-    }
-    vos_mem_free(pSirSmeMgmtFrame);
+    mmhMsg.type = eWNI_SME_MGMT_FRM_IND;
+    mmhMsg.bodyptr = pSirSmeMgmtFrame;
+    mmhMsg.bodyval = 0;
+
+    limSysProcessMmhMsgApi(pMac, &mmhMsg, ePROT);
     return;
 } /*** end limSendSmeListenRsp() ***/
 
@@ -1169,28 +1168,34 @@ void limSendP2PActionFrame(tpAniSirGlobal pMac, tpSirMsgQ pMsg)
     pActionHdr = (tpSirMacActionFrameHdr) (pFrame + sizeof(tSirMacMgmtHdr));
 
     /*
-     * Setting Protected bit only for Robust Action Frames
+     * Setting Protected bit for SA_QUERY Action Frame
      * This has to be based on the current Connection with the station
-     * limSetProtectedBit API will set the protected bit if connection is PMF
+     * limSetProtectedBit API will set the protected bit if connection if PMF
      */
-    if ((SIR_MAC_MGMT_ACTION == pFc->subType) &&
-        psessionEntry->limRmfEnabled && (!limIsGroupAddr(pMacHdr->da)) &&
-        lim_is_robust_mgmt_action_frame(pActionHdr->category))
-    {
-        pMacHdr = (tpSirMacMgmtHdr)pFrame;
-        /* All psession checks are already done at start */
-        limSetProtectedBit(pMac, psessionEntry, pMacHdr->da, pMacHdr);
 
-        /*
-         * If wep bit is not set in MAC header of robust management action frame
-         * then we are trying to send RMF via non PMF connection.
-         * Drop the packet instead of sending malform packet.
-         */
-        if (0 ==  pMacHdr->fc.wep)
+    if ((SIR_MAC_MGMT_ACTION == pFc->subType) &&
+        (SIR_MAC_ACTION_SA_QUERY == pActionHdr->category))
+    {
+        pMacHdr    = (tpSirMacMgmtHdr ) pFrame;
+        psessionEntry = peFindSessionByBssid(pMac,
+                        (tANI_U8*)pMbMsg->data + BSSID_OFFSET, &sessionId);
+
+        /* Check for session corresponding to ADDR2 ss supplicant is filling
+           ADDR2  with BSSID */
+        if(NULL == psessionEntry)
+        {
+            psessionEntry = peFindSessionByBssid(pMac,
+                       (tANI_U8*)pMbMsg->data + ADDR2_OFFSET, &sessionId);
+        }
+
+        if(NULL != psessionEntry)
+        {
+            limSetProtectedBit(pMac, psessionEntry, pMacHdr->da, pMacHdr);
+        }
+        else
         {
             limLog(pMac, LOGE,
-                FL("Drop action frame with category[%d] due to non-PMF conn"),
-                pActionHdr->category);
+                FL("Dropping SA Query frame - Unable to find PE Session "));
             limSendSmeRsp(pMac, eWNI_SME_ACTION_FRAME_SEND_CNF,
                     eHAL_STATUS_FAILURE, pMbMsg->sessionId, 0);
             palPktFree( pMac->hHdd, HAL_TXRX_FRM_802_11_MGMT,
@@ -1198,6 +1203,21 @@ void limSendP2PActionFrame(tpAniSirGlobal pMac, tpSirMsgQ pMsg)
             return;
         }
 
+        /*
+         * If wep bit is not set in MAC header then we are trying to
+         * send SA Query via non PMF connection. Drop the packet.
+         */
+
+        if(0 ==  pMacHdr->fc.wep)
+        {
+            limLog(pMac, LOGE,
+                FL("Dropping SA Query frame due to non PMF connection\n"));
+            limSendSmeRsp(pMac, eWNI_SME_ACTION_FRAME_SEND_CNF,
+                    eHAL_STATUS_FAILURE, pMbMsg->sessionId, 0);
+            palPktFree( pMac->hHdd, HAL_TXRX_FRM_802_11_MGMT,
+                    ( void* ) pFrame, ( void* ) pPacket );
+            return;
+        }
     }
 #endif
 

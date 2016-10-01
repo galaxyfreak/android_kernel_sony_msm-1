@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -1131,6 +1131,7 @@ limProcessMlmAuthInd(tpAniSirGlobal pMac, tANI_U32 *pMsgBuf)
         // Log error
         limLog(pMac, LOGP,
            FL("call to AllocateMemory failed for eWNI_SME_AUTH_IND"));
+        return;
     }
     limCopyU16((tANI_U8 *) &pSirSmeAuthInd->messageType, eWNI_SME_AUTH_IND);
     limAuthIndSerDes(pMac, (tpLimMlmAuthInd) pMsgBuf,
@@ -1826,20 +1827,12 @@ limHandleSmeJoinResult(tpAniSirGlobal pMac, tSirResultCodes resultCode, tANI_U16
             pStaDs->mlmStaContext.protStatusCode = protStatusCode;
             //Done: 7-27-2009. JIM_FIX_ME: at the end of limCleanupRxPath, make sure PE is sending eWNI_SME_JOIN_RSP to SME
             limCleanupRxPath(pMac, pStaDs, psessionEntry);
-            /* Cleanup if add bss failed */
-            if(psessionEntry->addBssfailed)
-            {
-              dphDeleteHashEntry(pMac, pStaDs->staAddr, pStaDs->assocId,
-                                   &psessionEntry->dph.dphHashTable);
-              goto error;
-            }
             vos_mem_free(psessionEntry->pLimJoinReq);
             psessionEntry->pLimJoinReq = NULL;
             return;
         }
     }
 
-error:
     vos_mem_free(psessionEntry->pLimJoinReq);
     psessionEntry->pLimJoinReq = NULL;
     //Delete teh session if JOIN failure occurred.
@@ -1903,17 +1896,10 @@ limHandleSmeReaasocResult(tpAniSirGlobal pMac, tSirResultCodes resultCode, tANI_
             pStaDs->mlmStaContext.resultCode = resultCode;
             pStaDs->mlmStaContext.protStatusCode = protStatusCode;
             limCleanupRxPath(pMac, pStaDs, psessionEntry);
-            /* Cleanup if add bss failed */
-            if(psessionEntry->addBssfailed)
-            {
-              dphDeleteHashEntry(pMac, pStaDs->staAddr, pStaDs->assocId,
-                                   &psessionEntry->dph.dphHashTable);
-              goto error;
-            }
             return;
         }
     }
-error:
+
     //Delete teh session if REASSOC failure occurred.
     if(resultCode != eSIR_SME_SUCCESS)
     {
@@ -3286,7 +3272,6 @@ limProcessStaMlmAddBssRsp( tpAniSirGlobal pMac, tpSirMsgQ limMsgQ,tpPESession ps
             mlmAssocCnf.resultCode = (tSirResultCodes) eSIR_SME_FT_REASSOC_FAILURE;
         else
             mlmAssocCnf.resultCode = (tSirResultCodes) eSIR_SME_REFUSED;
-        psessionEntry->addBssfailed = true;
     }
 
     if(mlmAssocCnf.resultCode != eSIR_SME_SUCCESS)
@@ -4800,14 +4785,13 @@ limHandleDelBssInReAssocContext(tpAniSirGlobal pMac, tpDphHashNode pStaDs,tpPESe
                   (tANI_U8 *) psessionEntry->pLimReAssocReq->bssDescription.ieFields,
                   limGetIElenFromBssDescription( &psessionEntry->pLimReAssocReq->bssDescription ),
                     pBeaconStruct );
-            if(pMac->lim.gLimProtectionControl != WNI_CFG_FORCE_POLICY_PROTECTION_DISABLE) {
+            if(pMac->lim.gLimProtectionControl != WNI_CFG_FORCE_POLICY_PROTECTION_DISABLE)
                 limDecideStaProtectionOnAssoc(pMac, pBeaconStruct, psessionEntry);
                 if(pBeaconStruct->erpPresent) {
-                    if (pBeaconStruct->erpIEInfo.barkerPreambleMode)
-                        psessionEntry->beaconParams.fShortPreamble = 0;
-                    else
-                        psessionEntry->beaconParams.fShortPreamble = 1;
-                }
+                if (pBeaconStruct->erpIEInfo.barkerPreambleMode)
+                    psessionEntry->beaconParams.fShortPreamble = 0;
+                else
+                    psessionEntry->beaconParams.fShortPreamble = 1;
             }
             //updateBss flag is false, as in this case, PE is first deleting the existing BSS and then adding a new one.
             if (eSIR_SUCCESS != limStaSendAddBss( pMac, assocRsp, pBeaconStruct,

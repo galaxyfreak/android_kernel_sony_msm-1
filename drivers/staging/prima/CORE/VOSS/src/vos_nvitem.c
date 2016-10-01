@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2015 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2016 The Linux Foundation. All rights reserved.
  *
  * Previously licensed under the ISC license by Qualcomm Atheros, Inc.
  *
@@ -184,7 +184,7 @@ static CountryInfoTable_t countryInfoTable =
       {REGDOMAIN_APAC, {'G', 'T'}},  //GUATEMALA
       {REGDOMAIN_FCC, {'G', 'U'}},  //GUAM
       {REGDOMAIN_ETSI, {'H', 'U'}}, //HUNGARY
-      {REGDOMAIN_FCC, {'I', 'D'}},  //INDONESIA
+      {REGDOMAIN_ETSI, {'I', 'D'}},  //INDONESIA
       {REGDOMAIN_ETSI, {'I', 'E'}}, //IRELAND
       {REGDOMAIN_ETSI, {'I', 'L'}}, //ISRAEL
       {REGDOMAIN_APAC, {'I', 'N'}}, //INDIA
@@ -254,15 +254,15 @@ static CountryInfoTable_t countryInfoTable =
       {REGDOMAIN_ETSI, {'T', 'R'}}, //TURKEY
       {REGDOMAIN_WORLD, {'T', 'T'}}, //TRINIDAD AND TOBAGO
       {REGDOMAIN_FCC, {'T', 'W'}}, //TAIWAN, PRIVINCE OF CHINA
-      {REGDOMAIN_FCC, {'T', 'Z'}}, //TANZANIA, UNITED REPUBLIC OF
+      {REGDOMAIN_ETSI, {'T', 'Z'}}, //TANZANIA, UNITED REPUBLIC OF
       {REGDOMAIN_WORLD, {'U', 'A'}}, //UKRAINE
       {REGDOMAIN_KOREA, {'U', 'G'}}, //UGANDA
       {REGDOMAIN_FCC, {'U', 'S'}}, //USA
       {REGDOMAIN_WORLD, {'U', 'Y'}}, //URUGUAY
-      {REGDOMAIN_FCC, {'U', 'Z'}}, //UZBEKISTAN
+      {REGDOMAIN_ETSI, {'U', 'Z'}}, //UZBEKISTAN
       {REGDOMAIN_ETSI, {'V', 'E'}}, //VENEZUELA
       {REGDOMAIN_FCC, {'V', 'I'}}, //VIRGIN ISLANDS, US
-      {REGDOMAIN_FCC, {'V', 'N'}}, //VIETNAM
+      {REGDOMAIN_ETSI, {'V', 'N'}}, //VIETNAM
       {REGDOMAIN_ETSI, {'Y', 'E'}}, //YEMEN
       {REGDOMAIN_ETSI, {'Y', 'T'}}, //MAYOTTE
       {REGDOMAIN_ETSI, {'Z', 'A'}}, //SOUTH AFRICA
@@ -3641,11 +3641,7 @@ int vos_update_nv_table_from_wiphy_band(void *hdd_ctx,
                  * will not change channel to active.
                  */
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
-                if  (!(wiphy->regulatory_flags & REGULATORY_STRICT_REG))
-#else
                 if  (!(wiphy->flags & WIPHY_FLAG_STRICT_REGULATORY ))
-#endif
                 {
                     if (!(reg_rule->flags & NL80211_RRF_PASSIVE_SCAN))
                     {
@@ -4017,6 +4013,27 @@ int __wlan_hdd_linux_reg_notifier(struct wiphy *wiphy,
     if (request->initiator == NL80211_REGDOM_SET_BY_DRIVER)
     {
 
+        if (vos_is_load_unload_in_progress(VOS_MODULE_ID_VOSS, NULL)) {
+            temp_reg_domain = REGDOMAIN_COUNT;
+            /* lookup the country in the local database */
+            for (i = 0; i < countryInfoTable.countryCount &&
+                         REGDOMAIN_COUNT == temp_reg_domain; i++)
+            {
+                if (memcmp(request->alpha2, countryInfoTable.countryInfo[i].countryCode,
+                           VOS_COUNTRY_CODE_LEN) == 0)
+                {
+                /* country code is found */
+                /* record the temporary regulatory_domain as well */
+                temp_reg_domain = countryInfoTable.countryInfo[i].regDomain;
+                break;
+                }
+            }
+            if (REGDOMAIN_COUNT == temp_reg_domain)
+                temp_reg_domain = REGDOMAIN_WORLD;
+
+            cur_reg_domain = temp_reg_domain;
+        }
+
         isVHT80Allowed = pHddCtx->isVHT80Allowed;
         if (create_linux_regulatory_entry(wiphy, request, nBandCapability) == 0)
         {
@@ -4045,6 +4062,7 @@ int __wlan_hdd_linux_reg_notifier(struct wiphy *wiphy,
 
         if (!(pnvEFSTable->halnv.tables.defaultCountryTable.countryCode[0] == '0' &&
              pnvEFSTable->halnv.tables.defaultCountryTable.countryCode[1] == '0') &&
+            (request->initiator ==  NL80211_REGDOM_SET_BY_CORE) &&
             (vos_is_load_unload_in_progress( VOS_MODULE_ID_VOSS, NULL)))
         {
            VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
@@ -4092,16 +4110,18 @@ int __wlan_hdd_linux_reg_notifier(struct wiphy *wiphy,
 
         cur_reg_domain = temp_reg_domain;
 
-        /* now pass the new country information to sme */
-        if (request->alpha2[0] == '0' && request->alpha2[1] == '0')
-        {
-           sme_GenericChangeCountryCode(pHddCtx->hHal, country_code,
+        if(!vos_is_load_unload_in_progress( VOS_MODULE_ID_VOSS, NULL)) {
+            /* now pass the new country information to sme */
+            if (request->alpha2[0] == '0' && request->alpha2[1] == '0')
+            {
+               sme_GenericChangeCountryCode(pHddCtx->hHal, country_code,
                                            REGDOMAIN_COUNT);
-        }
-        else
-        {
-           sme_GenericChangeCountryCode(pHddCtx->hHal, country_code,
+            }
+            else
+            {
+               sme_GenericChangeCountryCode(pHddCtx->hHal, country_code,
                                         temp_reg_domain);
+            }
         }
 
     }
@@ -4197,11 +4217,7 @@ VOS_STATUS vos_init_wiphy_from_nv_bin(void)
         /* default country is world roaming */
 
         reg_domain = REGDOMAIN_WORLD;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
-        wiphy->regulatory_flags |= REGULATORY_CUSTOM_REG;
-#else
         wiphy->flags |= WIPHY_FLAG_CUSTOM_REGULATORY;
-#endif
     }
     else if (REGDOMAIN_WORLD ==
 	     pnvEFSTable->halnv.tables.defaultCountryTable.regDomain) {
@@ -4211,11 +4227,7 @@ VOS_STATUS vos_init_wiphy_from_nv_bin(void)
     else {
 
         reg_domain = pnvEFSTable->halnv.tables.defaultCountryTable.regDomain;
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,14,0))
-        wiphy->regulatory_flags |= REGULATORY_STRICT_REG;
-#else
         wiphy->flags |= WIPHY_FLAG_STRICT_REGULATORY;
-#endif
     }
 
     temp_reg_domain = cur_reg_domain = reg_domain;

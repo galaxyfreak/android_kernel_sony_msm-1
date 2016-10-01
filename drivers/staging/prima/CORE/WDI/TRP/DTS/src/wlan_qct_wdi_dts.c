@@ -57,7 +57,6 @@ static WDTS_TransportDriverTrype gTransportDriver = {
   WLANDXE_CompleteTX,
   WLANDXE_SetPowerState,
   WLANDXE_ChannelDebug,
-  WLANDXE_KickDxe,
   WLANDXE_Stop,
   WLANDXE_Close,
   WLANDXE_GetFreeTxDataResNumber,
@@ -1232,19 +1231,6 @@ wpt_status WDTS_SetPowerState(void *pContext, WDTS_PowerStateType  powerState,
 void WDTS_ChannelDebug(wpt_boolean displaySnapshot, wpt_uint8 debugFlags)
 {
    gTransportDriver.channelDebug(displaySnapshot, debugFlags);
-   return;
-}
-
-/* DTS Transport Channel Kick Dxe
- * Request Kick DXE when HDD TX time out happen
- *
- * Parameters  : NONE
- * Return Value: NONE
- *
- */
-void WDTS_ChannelKickDxe()
-{
-   gTransportDriver.kickDxe();
    return;
 }
 

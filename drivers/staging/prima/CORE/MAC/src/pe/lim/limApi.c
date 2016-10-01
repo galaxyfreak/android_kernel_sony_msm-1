@@ -2170,12 +2170,6 @@ void limHandleMissedBeaconInd(tpAniSirGlobal pMac, tpSirMsgQ pMsg)
          return;
     }
 #endif
-    if (pMac->pmm.inMissedBeaconScenario == TRUE) {
-         limLog(pMac, LOGW,
-               FL("beacon miss handling is already going on for BSSIdx:%d"),
-               pSirMissedBeaconInd->bssIdx);
-         return;
-    }
     if ( (pMac->pmm.gPmmState == ePMM_STATE_BMPS_SLEEP) ||
          (pMac->pmm.gPmmState == ePMM_STATE_UAPSD_SLEEP)||
          (pMac->pmm.gPmmState == ePMM_STATE_WOWLAN) )
@@ -2458,7 +2452,9 @@ boolean limIsDeauthDiassocForDrop(tpAniSirGlobal pMac,
     tpPESession     psessionEntry;
     tpSirMacMgmtHdr pMacHdr;
     tpDphHashNode     pStaDs;
+#ifdef LIM_TRACE_RECORD
     eHalStatus lock_status = eHAL_STATUS_SUCCESS;
+#endif
     boolean ret = FALSE;
 
     pMacHdr = WDA_GET_RX_MAC_HEADER(pRxPacketInfo);
@@ -2471,12 +2467,14 @@ boolean limIsDeauthDiassocForDrop(tpAniSirGlobal pMac,
         return TRUE;
     }
 
+#ifdef LIM_TRACE_RECORD
     lock_status =  pe_AcquireGlobalLock(&pMac->lim);
     if (lock_status != eHAL_STATUS_SUCCESS)
     {
         limLog(pMac, LOGE, FL("pe_AcquireGlobalLock error"));
         return TRUE;
     }
+#endif
 
     pStaDs = dphLookupHashEntry(pMac, pMacHdr->sa, &aid,
                                &psessionEntry->dph.dphHashTable);
@@ -2532,7 +2530,9 @@ boolean limIsDeauthDiassocForDrop(tpAniSirGlobal pMac,
     }
 
 end:
+#ifdef LIM_TRACE_RECORD
     pe_ReleaseGlobalLock(&pMac->lim);
+#endif
     return ret;
 }
 /** -----------------------------------------------------------------
